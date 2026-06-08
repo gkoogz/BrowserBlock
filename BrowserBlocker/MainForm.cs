@@ -9,6 +9,10 @@ namespace BrowserBlocker
     {
         private const int WmNclButtonDown = 0x00A1;
         private const int HtCaption = 0x0002;
+        private const uint SwpNoSize = 0x0001;
+        private const uint SwpNoMove = 0x0002;
+        private const uint SwpNoActivate = 0x0010;
+        private static readonly IntPtr HwndBottom = new IntPtr(1);
 
         private static readonly Color DarkBackground = Color.FromArgb(24, 26, 31);
         private static readonly Color DarkText = Color.White;
@@ -18,6 +22,7 @@ namespace BrowserBlocker
         private static readonly Color LightMutedText = Color.FromArgb(104, 109, 119);
         private static readonly Color RedColor = Color.FromArgb(224, 67, 67);
         private static readonly Color GreenColor = Color.FromArgb(65, 196, 112);
+        private static readonly Color DismissColor = Color.FromArgb(91, 96, 106);
 
         private readonly BrowserBlockService blockService;
         private readonly Timer displayTimer;
@@ -25,8 +30,12 @@ namespace BrowserBlocker
         private readonly Label titleLabel;
         private readonly Label statusLabel;
         private readonly Button blockButton;
+        private readonly Button dismissButton;
         private readonly Label countdownLabel;
         private readonly Label hintLabel;
+        private readonly Label promptQuestionLabel;
+        private readonly Label promptCountdownLabel;
+        private readonly WindowSettingsStore windowSettingsStore;
         private readonly IconButton pinButton;
         private readonly IconButton themeButton;
         private readonly IconButton minimizeButton;
@@ -34,11 +43,20 @@ namespace BrowserBlocker
 
         private bool isPinned;
         private bool isDarkMode = true;
+        private bool isHourlyPromptActive;
+        private bool wasMinimizedBeforeHourlyPrompt;
+        private bool wasTopMostBeforeHourlyPrompt;
+        private bool expirationPromptShownForCurrentBlock;
+        private bool wasBlockedOnPreviousTick;
         private Color statusDotColor = GreenColor;
+        private DateTime hourlyPromptUntilUtc;
+        private DateTime lastPromptHour = DateTime.MinValue;
+        private IntPtr previousForegroundWindow = IntPtr.Zero;
 
         public MainForm()
         {
             blockService = new BrowserBlockService(BlockStateStore.CreateDefault());
+            windowSettingsStore = WindowSettingsStore.CreateDefault();
 
             Text = "BrowserBlocker";
             ClientSize = new Size(380, 220);
@@ -49,6 +67,7 @@ namespace BrowserBlocker
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
             FormClosing += MainFormClosing;
+            Move += MainFormMove;
 
             pinButton = CreateIconButton(IconButtonKind.Pin, new Point(10, 9), "Pin widget");
             pinButton.Click += PinButtonClick;
@@ -112,6 +131,24 @@ namespace BrowserBlocker
             blockButton.FlatAppearance.MouseDownBackColor = Color.FromArgb(194, 52, 52);
             blockButton.Click += BlockButtonClick;
 
+            dismissButton = new Button
+            {
+                Text = "Dismiss",
+                FlatStyle = FlatStyle.Flat,
+                BackColor = DismissColor,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI Semibold", 11F, FontStyle.Bold),
+                Size = new Size(158, 50),
+                Location = new Point(198, 111),
+                Cursor = Cursors.Hand,
+                UseVisualStyleBackColor = false,
+                Visible = false
+            };
+            dismissButton.FlatAppearance.BorderSize = 0;
+            dismissButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(108, 114, 125);
+            dismissButton.FlatAppearance.MouseDownBackColor = Color.FromArgb(73, 78, 87);
+            dismissButton.Click += delegate { DismissHourlyPrompt(); };
+
             countdownLabel = new Label
             {
                 TextAlign = ContentAlignment.MiddleCenter,
@@ -119,6 +156,27 @@ namespace BrowserBlocker
                 Font = new Font("Segoe UI Semibold", 25F, FontStyle.Bold),
                 Size = blockButton.Size,
                 Location = blockButton.Location,
+                Visible = false
+            };
+
+            promptQuestionLabel = new Label
+            {
+                Text = "Would you like to block your browser for an hour?",
+                TextAlign = ContentAlignment.MiddleCenter,
+                ForeColor = DarkText,
+                Font = new Font("Segoe UI Semibold", 11F, FontStyle.Bold),
+                Size = new Size(332, 42),
+                Location = new Point(24, 56),
+                Visible = false
+            };
+
+            promptCountdownLabel = new Label
+            {
+                TextAlign = ContentAlignment.MiddleCenter,
+                ForeColor = DarkMutedText,
+                Font = new Font("Segoe UI", 9F),
+                Size = new Size(332, 24),
+                Location = new Point(24, 174),
                 Visible = false
             };
 
@@ -138,7 +196,10 @@ namespace BrowserBlocker
             Controls.Add(statusDot);
             Controls.Add(statusLabel);
             Controls.Add(blockButton);
+            Controls.Add(dismissButton);
             Controls.Add(countdownLabel);
+            Controls.Add(promptQuestionLabel);
+            Controls.Add(promptCountdownLabel);
             Controls.Add(hintLabel);
 
             AttachDragHandler(this);
@@ -148,8 +209,10 @@ namespace BrowserBlocker
             displayTimer.Start();
 
             blockService.Start();
+            RestoreWindowLocation();
             ApplyTheme();
             UpdateDisplay();
+            UpdateHourlyPrompt();
         }
 
         [DllImport("user32.dll")]
@@ -157,6 +220,25 @@ namespace BrowserBlocker
 
         [DllImport("user32.dll")]
         private static extern IntPtr SendMessage(IntPtr windowHandle, int message, IntPtr parameter, IntPtr value);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr windowHandle);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindow(IntPtr windowHandle);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetWindowPos(
+            IntPtr windowHandle,
+            IntPtr windowHandleInsertAfter,
+            int x,
+            int y,
+            int width,
+            int height,
+            uint flags);
 
         private static IconButton CreateIconButton(IconButtonKind kind, Point location, string tooltip)
         {
@@ -220,6 +302,8 @@ namespace BrowserBlocker
             titleLabel.ForeColor = text;
             countdownLabel.ForeColor = text;
             hintLabel.ForeColor = mutedText;
+            promptQuestionLabel.ForeColor = text;
+            promptCountdownLabel.ForeColor = mutedText;
             statusDot.BackColor = background;
 
             foreach (IconButton button in new[] { pinButton, themeButton, minimizeButton, closeButton })
@@ -243,6 +327,9 @@ namespace BrowserBlocker
             try
             {
                 blockService.BeginBlock(TimeSpan.FromHours(1));
+                expirationPromptShownForCurrentBlock = false;
+                wasBlockedOnPreviousTick = true;
+                DismissHourlyPrompt();
             }
             catch (Exception ex)
             {
@@ -268,21 +355,33 @@ namespace BrowserBlocker
             }
         }
 
+        private void MainFormMove(object sender, EventArgs e)
+        {
+            SaveWindowLocation();
+        }
+
         private void DisplayTimerTick(object sender, EventArgs e)
         {
             UpdateDisplay();
+            UpdateHourlyPrompt();
         }
 
         private void UpdateDisplay()
         {
             bool blocked = blockService.IsBlocked;
+
             statusLabel.Text = blocked ? "Blocked" : "Unblocked";
             statusLabel.ForeColor = blocked ? RedColor : GreenColor;
             statusDotColor = blocked ? RedColor : GreenColor;
             statusDot.Invalidate();
 
-            blockButton.Visible = !blocked;
-            countdownLabel.Visible = blocked;
+            if (!isHourlyPromptActive)
+            {
+                blockButton.Visible = !blocked;
+                countdownLabel.Visible = blocked;
+                hintLabel.Visible = true;
+            }
+
             closeButton.Enabled = !blocked;
             closeButton.Cursor = blocked ? Cursors.Default : Cursors.Hand;
 
@@ -295,6 +394,151 @@ namespace BrowserBlocker
                     totalSeconds / 3600,
                     (totalSeconds % 3600) / 60,
                     totalSeconds % 60);
+            }
+        }
+
+        private void UpdateHourlyPrompt()
+        {
+            bool blocked = blockService.IsBlocked;
+            DateTime localNow = DateTime.Now;
+
+            if (blocked && !wasBlockedOnPreviousTick)
+            {
+                expirationPromptShownForCurrentBlock = false;
+            }
+            else if (!blocked)
+            {
+                expirationPromptShownForCurrentBlock = false;
+            }
+
+            wasBlockedOnPreviousTick = blocked;
+
+            if (!isHourlyPromptActive &&
+                HourlyPromptSchedule.ShouldShow(localNow, lastPromptHour, blocked))
+            {
+                ShowHourlyPrompt(localNow);
+            }
+            else if (!isHourlyPromptActive &&
+                HourlyPromptSchedule.ShouldShowBlockExpiration(
+                    blockService.Remaining,
+                    blocked,
+                    expirationPromptShownForCurrentBlock))
+            {
+                expirationPromptShownForCurrentBlock = true;
+                ShowHourlyPrompt(localNow);
+            }
+
+            if (!isHourlyPromptActive)
+            {
+                return;
+            }
+
+            if (localNow.Minute == 0)
+            {
+                lastPromptHour = HourlyPromptSchedule.GetHourKey(localNow);
+            }
+
+            int secondsRemaining = Math.Max(
+                0,
+                (int)Math.Ceiling((hourlyPromptUntilUtc - DateTime.UtcNow).TotalSeconds));
+            if (secondsRemaining <= 0)
+            {
+                DismissHourlyPrompt();
+                return;
+            }
+
+            promptCountdownLabel.Text = string.Format(
+                "This prompt will dismiss in {0} second{1}",
+                secondsRemaining,
+                secondsRemaining == 1 ? string.Empty : "s");
+        }
+
+        private void ShowHourlyPrompt(DateTime localNow)
+        {
+            isHourlyPromptActive = true;
+            lastPromptHour = HourlyPromptSchedule.GetHourKey(localNow);
+            hourlyPromptUntilUtc = DateTime.UtcNow.AddSeconds(60);
+            previousForegroundWindow = GetForegroundWindow();
+            wasMinimizedBeforeHourlyPrompt = WindowState == FormWindowState.Minimized;
+            wasTopMostBeforeHourlyPrompt = TopMost;
+
+            statusDot.Visible = false;
+            statusLabel.Visible = false;
+            countdownLabel.Visible = false;
+            hintLabel.Visible = false;
+            promptQuestionLabel.Visible = true;
+            promptCountdownLabel.Visible = true;
+            dismissButton.Visible = true;
+
+            blockButton.Size = new Size(158, 50);
+            blockButton.Location = new Point(24, 111);
+            blockButton.Text = "Block Browsers";
+            blockButton.Visible = true;
+
+            if (WindowState == FormWindowState.Minimized)
+            {
+                WindowState = FormWindowState.Normal;
+            }
+
+            Show();
+            TopMost = true;
+            BringToFront();
+            Activate();
+            SetForegroundWindow(Handle);
+        }
+
+        private void DismissHourlyPrompt()
+        {
+            if (!isHourlyPromptActive)
+            {
+                return;
+            }
+
+            isHourlyPromptActive = false;
+            RestoreWindowZOrderAfterPrompt();
+
+            statusDot.Visible = true;
+            statusLabel.Visible = true;
+            promptQuestionLabel.Visible = false;
+            promptCountdownLabel.Visible = false;
+            dismissButton.Visible = false;
+            hintLabel.Visible = true;
+
+            blockButton.Size = new Size(332, 58);
+            blockButton.Location = new Point(24, 102);
+            UpdateDisplay();
+        }
+
+        private void RestoreWindowZOrderAfterPrompt()
+        {
+            TopMost = wasTopMostBeforeHourlyPrompt;
+            if (!wasTopMostBeforeHourlyPrompt)
+            {
+                SetWindowPos(
+                    Handle,
+                    HwndBottom,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SwpNoSize | SwpNoMove | SwpNoActivate);
+            }
+
+            if (wasMinimizedBeforeHourlyPrompt)
+            {
+                WindowState = FormWindowState.Minimized;
+                return;
+            }
+
+            if (previousForegroundWindow != IntPtr.Zero &&
+                previousForegroundWindow != Handle &&
+                IsWindow(previousForegroundWindow))
+            {
+                SetForegroundWindow(previousForegroundWindow);
+            }
+            else if (!wasTopMostBeforeHourlyPrompt)
+            {
+                SendToBack();
             }
         }
 
@@ -316,6 +560,24 @@ namespace BrowserBlocker
             }
 
             base.Dispose(disposing);
+        }
+
+        private void RestoreWindowLocation()
+        {
+            Point? savedLocation = windowSettingsStore.LoadLocation(Size);
+            if (savedLocation.HasValue)
+            {
+                StartPosition = FormStartPosition.Manual;
+                Location = savedLocation.Value;
+            }
+        }
+
+        private void SaveWindowLocation()
+        {
+            if (WindowState == FormWindowState.Normal)
+            {
+                windowSettingsStore.SaveLocation(Location);
+            }
         }
     }
 }

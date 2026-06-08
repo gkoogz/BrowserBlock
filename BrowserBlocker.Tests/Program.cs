@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.IO;
 
 namespace BrowserBlocker.Tests
@@ -17,6 +18,50 @@ namespace BrowserBlocker.Tests
             Assert(!BrowserCatalog.IsBrowserProcess("msedgewebview2"), "WebView2 is not blocked");
             Assert(!BrowserCatalog.IsBrowserProcess("explorer"), "Windows Explorer is not blocked");
 
+            DateTime tenOClock = new DateTime(2026, 6, 7, 10, 0, 0, DateTimeKind.Local);
+            Assert(
+                HourlyPromptSchedule.ShouldShow(tenOClock, DateTime.MinValue, false),
+                "Hourly prompt appears on the hour");
+            Assert(
+                HourlyPromptSchedule.ShouldShow(tenOClock.AddSeconds(45), DateTime.MinValue, false),
+                "Hourly prompt can appear after a chained block expires");
+            Assert(
+                !HourlyPromptSchedule.ShouldShow(tenOClock.AddMinutes(1), DateTime.MinValue, false),
+                "Hourly prompt does not appear after the first minute");
+            Assert(
+                !HourlyPromptSchedule.ShouldShow(
+                    tenOClock,
+                    HourlyPromptSchedule.GetHourKey(tenOClock),
+                    false),
+                "Hourly prompt appears only once per hour");
+            Assert(
+                !HourlyPromptSchedule.ShouldShow(tenOClock, DateTime.MinValue, true),
+                "Hourly prompt is skipped while blocked");
+            Assert(
+                HourlyPromptSchedule.ShouldShowBlockExpiration(
+                    TimeSpan.FromSeconds(59),
+                    true,
+                    false),
+                "Expiration prompt appears at 59 seconds");
+            Assert(
+                !HourlyPromptSchedule.ShouldShowBlockExpiration(
+                    TimeSpan.FromSeconds(60),
+                    true,
+                    false),
+                "Expiration prompt does not appear early");
+            Assert(
+                !HourlyPromptSchedule.ShouldShowBlockExpiration(
+                    TimeSpan.FromSeconds(30),
+                    true,
+                    true),
+                "Expiration prompt appears only once per block");
+            Assert(
+                !HourlyPromptSchedule.ShouldShowBlockExpiration(
+                    TimeSpan.Zero,
+                    false,
+                    false),
+                "Expiration prompt does not appear after expiry");
+
             string directory = Path.Combine(Path.GetTempPath(), "BrowserBlocker.Tests", Guid.NewGuid().ToString("N"));
             string statePath = Path.Combine(directory, "state.txt");
             BlockStateStore store = new BlockStateStore(statePath);
@@ -30,6 +75,18 @@ namespace BrowserBlocker.Tests
             store.Clear();
             Assert(!File.Exists(statePath), "Clearing removes persisted state");
             Directory.Delete(directory, true);
+
+            string settingsDirectory = Path.Combine(
+                Path.GetTempPath(),
+                "BrowserBlocker.Tests",
+                Guid.NewGuid().ToString("N"));
+            string settingsPath = Path.Combine(settingsDirectory, "window-position.txt");
+            WindowSettingsStore settingsStore = new WindowSettingsStore(settingsPath);
+            Point expectedLocation = new Point(25, 30);
+            settingsStore.SaveLocation(expectedLocation);
+            Point? loadedLocation = settingsStore.LoadLocation(new Size(380, 220));
+            Assert(loadedLocation == expectedLocation, "Window location round-trips");
+            Directory.Delete(settingsDirectory, true);
 
             Console.WriteLine(failures == 0 ? "All tests passed." : failures + " test(s) failed.");
             return failures == 0 ? 0 : 1;
@@ -48,4 +105,3 @@ namespace BrowserBlocker.Tests
         }
     }
 }
-

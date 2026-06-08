@@ -24,6 +24,12 @@ BrowserBlocker\bin\Release\BrowserBlocker.exe
 ## Behavior
 
 - Clicking **Block Browsers** starts an irreversible one-hour countdown.
+- At the top of each hour, when no block is active, the widget comes to the
+  foreground for 60 seconds and asks whether to start another one-hour block.
+- The hourly prompt includes **Block Browsers** and **Dismiss** buttons and
+  auto-dismisses if no choice is made.
+- The same 60-second prompt appears when an active block reaches 59 seconds
+  remaining, allowing another one-hour block to be chained immediately.
 - BrowserBlocker closes recognized browser processes every 300 milliseconds.
 - Windows Task Scheduler runs a per-user watchdog for the duration of a block.
   Closing or force-quitting the widget does not lift an active block.
