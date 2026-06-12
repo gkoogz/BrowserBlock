@@ -6,8 +6,8 @@
     <ProjectGuid>{E70B825C-4186-47CE-B59A-F0B3B9478A30}</ProjectGuid>
     <OutputType>WinExe</OutputType>
     <RootNamespace>BrowserBlocker</RootNamespace>
-    <AssemblyName>BrowserBlocker</AssemblyName>
-    <ApplicationIcon>Assets\BrowserBlocker.ico</ApplicationIcon>
+    <AssemblyName>BrowserBlock</AssemblyName>
+    <ApplicationIcon>Assets\BrowserBlock.ico</ApplicationIcon>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -38,6 +38,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BlockStateStore.cs" />
+    <Compile Include="AppPaths.cs" />
     <Compile Include="BrowserCatalog.cs" />
     <Compile Include="BrowserBlockService.cs" />
     <Compile Include="DurableEnforcement.cs" />
@@ -45,12 +46,13 @@
     <Compile Include="IconButton.cs" />
     <Compile Include="MainForm.cs" />
     <Compile Include="Program.cs" />
+    <Compile Include="StartupManager.cs" />
     <Compile Include="WindowSettingsStore.cs" />
     <Compile Include="WatchdogHost.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Assets\BrowserBlocker.ico" />
+    <Content Include="Assets\BrowserBlock.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

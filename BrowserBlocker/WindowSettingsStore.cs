@@ -9,8 +9,14 @@ namespace BrowserBlocker
     public sealed class WindowSettingsStore
     {
         private readonly string settingsFilePath;
+        private readonly string legacySettingsFilePath;
 
         public WindowSettingsStore(string settingsFilePath)
+            : this(settingsFilePath, null)
+        {
+        }
+
+        public WindowSettingsStore(string settingsFilePath, string legacySettingsFilePath)
         {
             if (string.IsNullOrWhiteSpace(settingsFilePath))
             {
@@ -18,27 +24,44 @@ namespace BrowserBlocker
             }
 
             this.settingsFilePath = settingsFilePath;
+            this.legacySettingsFilePath = legacySettingsFilePath;
         }
 
         public static WindowSettingsStore CreateDefault()
         {
-            string directory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "BrowserBlocker");
-            return new WindowSettingsStore(Path.Combine(directory, "window-position.txt"));
+            return new WindowSettingsStore(
+                Path.Combine(AppPaths.LocalAppDataDirectory, "window-position.txt"),
+                Path.Combine(AppPaths.LegacyLocalAppDataDirectory, "window-position.txt"));
         }
 
-        public Point? LoadLocation(Size windowSize)
+        public Rectangle? LoadBounds(Size defaultSize)
+        {
+            Rectangle? bounds = LoadBounds(settingsFilePath, defaultSize);
+            if (bounds.HasValue)
+            {
+                return bounds;
+            }
+
+            Rectangle? legacyBounds = LoadBounds(legacySettingsFilePath, defaultSize);
+            if (legacyBounds.HasValue)
+            {
+                SaveBounds(legacyBounds.Value);
+            }
+
+            return legacyBounds;
+        }
+
+        private static Rectangle? LoadBounds(string path, Size defaultSize)
         {
             try
             {
-                if (!File.Exists(settingsFilePath))
+                if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
                 {
                     return null;
                 }
 
-                string[] parts = File.ReadAllText(settingsFilePath).Trim().Split(',');
-                if (parts.Length != 2)
+                string[] parts = File.ReadAllText(path).Trim().Split(',');
+                if (parts.Length != 2 && parts.Length != 4)
                 {
                     return null;
                 }
@@ -51,15 +74,18 @@ namespace BrowserBlocker
                     return null;
                 }
 
-                Point location = new Point(x, y);
-                Rectangle windowBounds = new Rectangle(location, windowSize);
-                foreach (Screen screen in Screen.AllScreens)
+                int width = defaultSize.Width;
+                int height = defaultSize.Height;
+                if (parts.Length == 4 &&
+                    (!int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out width) ||
+                     !int.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out height)))
                 {
-                    if (screen.WorkingArea.IntersectsWith(windowBounds))
-                    {
-                        return location;
-                    }
+                    return null;
                 }
+
+                width = Math.Max(defaultSize.Width, width);
+                height = Math.Max(defaultSize.Height, height);
+                return EnsureVisible(new Rectangle(x, y, width, height));
             }
             catch (IOException)
             {
@@ -71,7 +97,7 @@ namespace BrowserBlocker
             return null;
         }
 
-        public void SaveLocation(Point location)
+        public void SaveBounds(Rectangle bounds)
         {
             try
             {
@@ -85,9 +111,11 @@ namespace BrowserBlocker
                     settingsFilePath,
                     string.Format(
                         CultureInfo.InvariantCulture,
-                        "{0},{1}",
-                        location.X,
-                        location.Y));
+                        "{0},{1},{2},{3}",
+                        bounds.X,
+                        bounds.Y,
+                        bounds.Width,
+                        bounds.Height));
             }
             catch (IOException)
             {
@@ -95,6 +123,41 @@ namespace BrowserBlocker
             catch (UnauthorizedAccessException)
             {
             }
+        }
+
+        private static Rectangle? EnsureVisible(Rectangle bounds)
+        {
+            Screen nearestScreen = null;
+            int nearestDistance = int.MaxValue;
+            foreach (Screen screen in Screen.AllScreens)
+            {
+                if (screen.WorkingArea.IntersectsWith(bounds))
+                {
+                    return ClampToWorkingArea(bounds, screen.WorkingArea);
+                }
+
+                int distance =
+                    Math.Abs(screen.WorkingArea.Left - bounds.Left) +
+                    Math.Abs(screen.WorkingArea.Top - bounds.Top);
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    nearestScreen = screen;
+                }
+            }
+
+            return nearestScreen == null
+                ? (Rectangle?)null
+                : ClampToWorkingArea(bounds, nearestScreen.WorkingArea);
+        }
+
+        private static Rectangle ClampToWorkingArea(Rectangle bounds, Rectangle workingArea)
+        {
+            int width = Math.Min(bounds.Width, workingArea.Width);
+            int height = Math.Min(bounds.Height, workingArea.Height);
+            int x = Math.Min(Math.Max(bounds.X, workingArea.Left), workingArea.Right - width);
+            int y = Math.Min(Math.Max(bounds.Y, workingArea.Top), workingArea.Bottom - height);
+            return new Rectangle(x, y, width, height);
         }
     }
 }

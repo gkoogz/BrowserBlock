@@ -58,7 +58,7 @@ namespace BrowserBlocker
             blockService = new BrowserBlockService(BlockStateStore.CreateDefault());
             windowSettingsStore = WindowSettingsStore.CreateDefault();
 
-            Text = "BrowserBlocker";
+            Text = AppPaths.AppName;
             ClientSize = new Size(380, 220);
             BackColor = DarkBackground;
             ForeColor = DarkText;
@@ -68,6 +68,7 @@ namespace BrowserBlocker
             StartPosition = FormStartPosition.CenterScreen;
             FormClosing += MainFormClosing;
             Move += MainFormMove;
+            ResizeEnd += MainFormResizeEnd;
 
             pinButton = CreateIconButton(IconButtonKind.Pin, new Point(10, 9), "Pin widget");
             pinButton.Click += PinButtonClick;
@@ -93,7 +94,7 @@ namespace BrowserBlocker
 
             titleLabel = new Label
             {
-                Text = "BrowserBlocker",
+                Text = AppPaths.AppName,
                 Font = new Font("Segoe UI Semibold", 15F, FontStyle.Bold),
                 ForeColor = DarkText,
                 AutoSize = true,
@@ -335,8 +336,8 @@ namespace BrowserBlocker
             {
                 MessageBox.Show(
                     this,
-                    "BrowserBlocker could not start the block.\r\n\r\n" + ex.Message,
-                    "BrowserBlocker",
+                    AppPaths.AppName + " could not start the block.\r\n\r\n" + ex.Message,
+                    AppPaths.AppName,
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
             }
@@ -349,6 +350,7 @@ namespace BrowserBlocker
 
         private void MainFormClosing(object sender, FormClosingEventArgs e)
         {
+            SaveWindowBounds();
             if (blockService.IsBlocked && e.CloseReason != CloseReason.WindowsShutDown)
             {
                 e.Cancel = true;
@@ -357,7 +359,12 @@ namespace BrowserBlocker
 
         private void MainFormMove(object sender, EventArgs e)
         {
-            SaveWindowLocation();
+            SaveWindowBounds();
+        }
+
+        private void MainFormResizeEnd(object sender, EventArgs e)
+        {
+            SaveWindowBounds();
         }
 
         private void DisplayTimerTick(object sender, EventArgs e)
@@ -564,19 +571,19 @@ namespace BrowserBlocker
 
         private void RestoreWindowLocation()
         {
-            Point? savedLocation = windowSettingsStore.LoadLocation(Size);
-            if (savedLocation.HasValue)
+            Rectangle? savedBounds = windowSettingsStore.LoadBounds(Size);
+            if (savedBounds.HasValue)
             {
                 StartPosition = FormStartPosition.Manual;
-                Location = savedLocation.Value;
+                Bounds = savedBounds.Value;
             }
         }
 
-        private void SaveWindowLocation()
+        private void SaveWindowBounds()
         {
             if (WindowState == FormWindowState.Normal)
             {
-                windowSettingsStore.SaveLocation(Location);
+                windowSettingsStore.SaveBounds(Bounds);
             }
         }
     }

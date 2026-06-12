@@ -1,8 +1,8 @@
-# BrowserBlocker
+# BrowserBlock
 
-BrowserBlocker is a small Windows desktop widget that closes and blocks common
+BrowserBlock is a small Windows desktop widget that closes and blocks common
 web browsers for one hour. The countdown deadline is stored in the current
-user's local application data, so reopening BrowserBlocker does not reset an
+user's local application data, so reopening BrowserBlock does not reset an
 active session.
 
 ## Build
@@ -18,7 +18,7 @@ configuration, or run:
 The executable is written to:
 
 ```text
-BrowserBlocker\bin\Release\BrowserBlocker.exe
+BrowserBlocker\bin\Release\BrowserBlock.exe
 ```
 
 ## Behavior
@@ -30,12 +30,13 @@ BrowserBlocker\bin\Release\BrowserBlocker.exe
   auto-dismisses if no choice is made.
 - The same 60-second prompt appears when an active block reaches 59 seconds
   remaining, allowing another one-hour block to be chained immediately.
-- BrowserBlocker closes recognized browser processes every 300 milliseconds.
+- BrowserBlock closes recognized browser processes every 300 milliseconds.
+- BrowserBlock registers itself in the current user's Windows startup apps.
 - Windows Task Scheduler runs a per-user watchdog for the duration of a block.
   Closing or force-quitting the widget does not lift an active block.
 - The watchdog removes its scheduled task after the saved UTC deadline expires.
 - WebView2 is intentionally not blocked because many ordinary Windows apps use
   it for embedded interfaces.
-- BrowserBlocker does not install a service or modify the registry and does not
-  require administrator rights. A browser running with higher privileges may
-  not be closable by a non-administrator BrowserBlocker process.
+- BrowserBlock does not install a service and does not require administrator
+  rights. A browser running with higher privileges may not be closable by a
+  non-administrator BrowserBlock process.

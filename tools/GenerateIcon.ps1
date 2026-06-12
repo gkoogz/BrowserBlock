@@ -1,6 +1,6 @@
 Add-Type -AssemblyName System.Drawing
 
-$outputPath = Join-Path $PSScriptRoot "..\BrowserBlocker\Assets\BrowserBlocker.ico"
+$outputPath = Join-Path $PSScriptRoot "..\BrowserBlocker\Assets\BrowserBlock.ico"
 $outputDirectory = Split-Path $outputPath
 if (!(Test-Path $outputDirectory)) {
     New-Item -ItemType Directory -Path $outputDirectory | Out-Null

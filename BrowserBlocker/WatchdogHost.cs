@@ -5,7 +5,7 @@ namespace BrowserBlocker
 {
     public static class WatchdogHost
     {
-        private const string MutexName = "Local\\BrowserBlockerWatchdog";
+        private const string MutexName = "Local\\BrowserBlockWatchdog";
 
         public static void Run()
         {

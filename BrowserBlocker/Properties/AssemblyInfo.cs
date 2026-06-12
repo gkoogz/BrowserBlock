@@ -1,10 +1,10 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-[assembly: AssemblyTitle("BrowserBlocker")]
+[assembly: AssemblyTitle("BrowserBlock")]
 [assembly: AssemblyDescription("A focused one-hour browser blocking widget for Windows.")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("BrowserBlocker")]
+[assembly: AssemblyProduct("BrowserBlock")]
 [assembly: AssemblyCopyright("Copyright © 2026")]
 [assembly: ComVisible(false)]
 [assembly: Guid("0d262893-6cb7-4359-95d8-56d721bcdde7")]

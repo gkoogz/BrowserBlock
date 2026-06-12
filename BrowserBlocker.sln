@@ -2,9 +2,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BrowserBlocker", "BrowserBlocker\BrowserBlocker.csproj", "{E70B825C-4186-47CE-B59A-F0B3B9478A30}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BrowserBlock", "BrowserBlocker\BrowserBlocker.csproj", "{E70B825C-4186-47CE-B59A-F0B3B9478A30}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BrowserBlocker.Tests", "BrowserBlocker.Tests\BrowserBlocker.Tests.csproj", "{61F9B1CA-CDFC-4F9E-8661-8DB6A35B6837}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BrowserBlock.Tests", "BrowserBlocker.Tests\BrowserBlocker.Tests.csproj", "{61F9B1CA-CDFC-4F9E-8661-8DB6A35B6837}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

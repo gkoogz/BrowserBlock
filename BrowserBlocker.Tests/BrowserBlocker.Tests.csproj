@@ -32,7 +32,7 @@
   <ItemGroup>
     <ProjectReference Include="..\BrowserBlocker\BrowserBlocker.csproj">
       <Project>{E70B825C-4186-47CE-B59A-F0B3B9478A30}</Project>
-      <Name>BrowserBlocker</Name>
+      <Name>BrowserBlock</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

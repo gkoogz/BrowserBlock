@@ -7,8 +7,14 @@ namespace BrowserBlocker
     public sealed class BlockStateStore
     {
         private readonly string stateFilePath;
+        private readonly string legacyStateFilePath;
 
         public BlockStateStore(string stateFilePath)
+            : this(stateFilePath, null)
+        {
+        }
+
+        public BlockStateStore(string stateFilePath, string legacyStateFilePath)
         {
             if (string.IsNullOrWhiteSpace(stateFilePath))
             {
@@ -16,28 +22,45 @@ namespace BrowserBlocker
             }
 
             this.stateFilePath = stateFilePath;
+            this.legacyStateFilePath = legacyStateFilePath;
         }
 
         public static BlockStateStore CreateDefault()
         {
-            string directory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "BrowserBlocker");
-            return new BlockStateStore(Path.Combine(directory, "block-until.txt"));
+            return new BlockStateStore(
+                Path.Combine(AppPaths.LocalAppDataDirectory, "block-until.txt"),
+                Path.Combine(AppPaths.LegacyLocalAppDataDirectory, "block-until.txt"));
         }
 
         public DateTime? LoadBlockUntilUtc()
         {
+            DateTime? current = LoadBlockUntilUtc(stateFilePath);
+            if (current.HasValue)
+            {
+                return current;
+            }
+
+            DateTime? legacy = LoadBlockUntilUtc(legacyStateFilePath);
+            if (legacy.HasValue)
+            {
+                SaveBlockUntilUtc(legacy.Value);
+            }
+
+            return legacy;
+        }
+
+        private static DateTime? LoadBlockUntilUtc(string path)
+        {
             try
             {
-                if (!File.Exists(stateFilePath))
+                if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
                 {
                     return null;
                 }
 
                 DateTime parsed;
                 if (DateTime.TryParseExact(
-                    File.ReadAllText(stateFilePath).Trim(),
+                    File.ReadAllText(path).Trim(),
                     "O",
                     CultureInfo.InvariantCulture,
                     DateTimeStyles.RoundtripKind,
@@ -76,6 +99,20 @@ namespace BrowserBlocker
                 if (File.Exists(stateFilePath))
                 {
                     File.Delete(stateFilePath);
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(legacyStateFilePath) && File.Exists(legacyStateFilePath))
+                {
+                    File.Delete(legacyStateFilePath);
                 }
             }
             catch (IOException)

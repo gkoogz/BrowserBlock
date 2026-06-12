@@ -10,7 +10,8 @@ namespace BrowserBlocker
 {
     public static class DurableEnforcement
     {
-        private const string TaskName = "BrowserBlockerWatchdog";
+        private const string TaskName = "BrowserBlockWatchdog";
+        private const string LegacyTaskName = "BrowserBlockerWatchdog";
 
         public static void Install()
         {
@@ -25,7 +26,7 @@ namespace BrowserBlocker
 
             string taskDefinitionPath = Path.Combine(
                 Path.GetTempPath(),
-                "BrowserBlocker-" + Guid.NewGuid().ToString("N") + ".xml");
+                AppPaths.AppName + "-" + Guid.NewGuid().ToString("N") + ".xml");
             try
             {
                 File.WriteAllText(
@@ -60,9 +61,15 @@ namespace BrowserBlocker
 
         public static void RemoveTask()
         {
+            RemoveTask(TaskName);
+            RemoveTask(LegacyTaskName);
+        }
+
+        private static void RemoveTask(string taskName)
+        {
             try
             {
-                RunTaskScheduler("/Delete /TN " + Quote(TaskName) + " /F");
+                RunTaskScheduler("/Delete /TN " + Quote(taskName) + " /F");
             }
             catch (InvalidOperationException)
             {
@@ -73,8 +80,8 @@ namespace BrowserBlocker
         {
             return Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "BrowserBlocker",
-                "BrowserBlockerWatchdog.exe");
+                AppPaths.AppName,
+                "BrowserBlockWatchdog.exe");
         }
 
         private static string CreateTaskDefinition(string watchdogPath)
@@ -84,7 +91,7 @@ namespace BrowserBlocker
             return
                 "<?xml version=\"1.0\" encoding=\"UTF-16\"?>" +
                 "<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">" +
-                "<RegistrationInfo><Author>BrowserBlocker</Author></RegistrationInfo>" +
+                "<RegistrationInfo><Author>" + AppPaths.AppName + "</Author></RegistrationInfo>" +
                 "<Triggers><TimeTrigger><Repetition><Interval>PT1M</Interval>" +
                 "<StopAtDurationEnd>false</StopAtDurationEnd></Repetition>" +
                 "<StartBoundary>" + startBoundary + "</StartBoundary><Enabled>true</Enabled>" +

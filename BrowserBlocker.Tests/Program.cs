@@ -82,10 +82,10 @@ namespace BrowserBlocker.Tests
                 Guid.NewGuid().ToString("N"));
             string settingsPath = Path.Combine(settingsDirectory, "window-position.txt");
             WindowSettingsStore settingsStore = new WindowSettingsStore(settingsPath);
-            Point expectedLocation = new Point(25, 30);
-            settingsStore.SaveLocation(expectedLocation);
-            Point? loadedLocation = settingsStore.LoadLocation(new Size(380, 220));
-            Assert(loadedLocation == expectedLocation, "Window location round-trips");
+            Rectangle expectedBounds = new Rectangle(25, 30, 380, 220);
+            settingsStore.SaveBounds(expectedBounds);
+            Rectangle? loadedBounds = settingsStore.LoadBounds(new Size(380, 220));
+            Assert(loadedBounds == expectedBounds, "Window bounds round-trip");
             Directory.Delete(settingsDirectory, true);
 
             Console.WriteLine(failures == 0 ? "All tests passed." : failures + " test(s) failed.");
