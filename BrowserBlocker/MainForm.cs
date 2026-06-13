@@ -40,6 +40,7 @@ namespace BrowserBlocker
         private readonly IconButton themeButton;
         private readonly IconButton minimizeButton;
         private readonly IconButton closeButton;
+        private readonly TaskbarStatus taskbarStatus;
 
         private bool isPinned;
         private bool isDarkMode = true;
@@ -57,6 +58,7 @@ namespace BrowserBlocker
         {
             blockService = new BrowserBlockService(BlockStateStore.CreateDefault());
             windowSettingsStore = WindowSettingsStore.CreateDefault();
+            taskbarStatus = new TaskbarStatus(this);
 
             Text = AppPaths.AppName;
             ClientSize = new Size(380, 220);
@@ -401,6 +403,11 @@ namespace BrowserBlocker
                     totalSeconds / 3600,
                     (totalSeconds % 3600) / 60,
                     totalSeconds % 60);
+                taskbarStatus.Update(blocked, remaining, TimeSpan.FromHours(1));
+            }
+            else
+            {
+                taskbarStatus.Clear();
             }
         }
 
@@ -564,6 +571,7 @@ namespace BrowserBlocker
             {
                 displayTimer.Dispose();
                 blockService.Dispose();
+                taskbarStatus.Dispose();
             }
 
             base.Dispose(disposing);

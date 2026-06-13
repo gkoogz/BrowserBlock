@@ -22,7 +22,7 @@ namespace BrowserBlocker
                 Directory.CreateDirectory(directory);
             }
 
-            File.Copy(Assembly.GetExecutingAssembly().Location, watchdogPath, true);
+            PrepareWatchdogExecutable(watchdogPath);
 
             string taskDefinitionPath = Path.Combine(
                 Path.GetTempPath(),
@@ -77,6 +77,28 @@ namespace BrowserBlocker
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 AppPaths.AppName,
                 "BrowserBlockWatchdog.exe");
+        }
+
+        private static void PrepareWatchdogExecutable(string watchdogPath)
+        {
+            try
+            {
+                File.Copy(Assembly.GetExecutingAssembly().Location, watchdogPath, true);
+            }
+            catch (IOException)
+            {
+                if (!File.Exists(watchdogPath))
+                {
+                    throw;
+                }
+            }
+            catch (UnauthorizedAccessException)
+            {
+                if (!File.Exists(watchdogPath))
+                {
+                    throw;
+                }
+            }
         }
 
         private static string CreateTaskDefinition(string watchdogPath)

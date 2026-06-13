@@ -47,6 +47,7 @@
     <Compile Include="MainForm.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="StartupManager.cs" />
+    <Compile Include="TaskbarStatus.cs" />
     <Compile Include="WindowSettingsStore.cs" />
     <Compile Include="WatchdogHost.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
