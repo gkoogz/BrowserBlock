@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -27,6 +28,7 @@ namespace BrowserBlocker
         private readonly ITaskbarList3 taskbarList;
 
         private IconPair countdownIcon;
+        private string countdownIconPath;
         private int lastMinute = -1;
         private bool showingCountdown;
         private bool taskbarReady;
@@ -65,6 +67,7 @@ namespace BrowserBlocker
                 IconPair nextIcon = CreateCountdownIconPair(minute);
                 IconPair previousIcon = countdownIcon;
                 countdownIcon = nextIcon;
+                countdownIconPath = SaveCountdownIcon(minute, countdownIcon.Big);
                 if (previousIcon != null)
                 {
                     previousIcon.Dispose();
@@ -75,6 +78,7 @@ namespace BrowserBlocker
             }
 
             ApplyWindowIcon(countdownIcon);
+            UpdatePinnedShortcutIcon(countdownIconPath);
 
             if (taskbarReady && form.IsHandleCreated)
             {
@@ -104,8 +108,10 @@ namespace BrowserBlocker
                 }
 
                 countdownIcon = null;
+                countdownIconPath = null;
                 lastMinute = -1;
                 showingCountdown = false;
+                RestorePinnedShortcutIcon();
             }
 
             if (taskbarReady && form.IsHandleCreated)
@@ -147,6 +153,26 @@ namespace BrowserBlocker
             return new IconPair(
                 CreateCountdownIcon(minute, smallWidth, smallHeight),
                 CreateCountdownIcon(minute, bigWidth, bigHeight));
+        }
+
+        private static string SaveCountdownIcon(int minute, Icon icon)
+        {
+            string directory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                AppPaths.AppName,
+                "TaskbarIcons");
+            if (!Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            string path = Path.Combine(directory, "countdown-" + Math.Min(99, minute) + ".ico");
+            using (FileStream stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read))
+            {
+                icon.Save(stream);
+            }
+
+            return path;
         }
 
         private static Icon CreateCountdownIcon(int minute, int width, int height)
@@ -257,6 +283,95 @@ namespace BrowserBlocker
             SetClassIcon(form.Handle, GclpHIconSmall, smallIcon.Handle);
         }
 
+        private static void UpdatePinnedShortcutIcon(string iconPath)
+        {
+            if (string.IsNullOrEmpty(iconPath))
+            {
+                return;
+            }
+
+            ApplyPinnedShortcutIconLocation(iconPath + ",0");
+        }
+
+        private static void RestorePinnedShortcutIcon()
+        {
+            ApplyPinnedShortcutIconLocation(Application.ExecutablePath + ",0");
+        }
+
+        private static void ApplyPinnedShortcutIconLocation(string iconLocation)
+        {
+            string shortcutPath = GetPinnedShortcutPath();
+            if (shortcutPath == null)
+            {
+                return;
+            }
+
+            try
+            {
+                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (shellType == null)
+                {
+                    return;
+                }
+
+                object shell = Activator.CreateInstance(shellType);
+                object shortcut = shellType.InvokeMember(
+                    "CreateShortcut",
+                    System.Reflection.BindingFlags.InvokeMethod,
+                    null,
+                    shell,
+                    new object[] { shortcutPath });
+
+                Type shortcutType = shortcut.GetType();
+                object current = shortcutType.InvokeMember(
+                    "IconLocation",
+                    System.Reflection.BindingFlags.GetProperty,
+                    null,
+                    shortcut,
+                    null);
+                if (string.Equals(Convert.ToString(current), iconLocation, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                shortcutType.InvokeMember(
+                    "IconLocation",
+                    System.Reflection.BindingFlags.SetProperty,
+                    null,
+                    shortcut,
+                    new object[] { iconLocation });
+                shortcutType.InvokeMember(
+                    "Save",
+                    System.Reflection.BindingFlags.InvokeMethod,
+                    null,
+                    shortcut,
+                    null);
+                SHChangeNotify(0x08000000, 0x0000, IntPtr.Zero, IntPtr.Zero);
+            }
+            catch (COMException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        private static string GetPinnedShortcutPath()
+        {
+            string taskbarDirectory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Microsoft",
+                "Internet Explorer",
+                "Quick Launch",
+                "User Pinned",
+                "TaskBar");
+            string shortcutPath = Path.Combine(taskbarDirectory, AppPaths.AppName + ".lnk");
+            return File.Exists(shortcutPath) ? shortcutPath : null;
+        }
+
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool DestroyIcon(IntPtr iconHandle);
 
@@ -288,6 +403,13 @@ namespace BrowserBlocker
             IntPtr windowHandle,
             int index,
             IntPtr newLong);
+
+        [DllImport("shell32.dll")]
+        private static extern void SHChangeNotify(
+            int eventId,
+            uint flags,
+            IntPtr item1,
+            IntPtr item2);
 
         [ComImport]
         [Guid("EA1AFB91-9E28-4B86-90E9-9E9F8A5EEFAF")]
