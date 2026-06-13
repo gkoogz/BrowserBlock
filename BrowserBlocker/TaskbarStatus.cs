@@ -203,7 +203,7 @@ namespace BrowserBlocker
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 AppPaths.AppName,
                 "TaskbarIcons",
-                "OutlinedV2");
+                "OutlinedV3");
         }
 
         private static string GetCountdownIconPath(int minute)
@@ -234,7 +234,7 @@ namespace BrowserBlocker
                 {
                     outline.LineJoin = LineJoin.Round;
                     RectangleF textBounds = path.GetBounds();
-                    float margin = Math.Max(3F, Math.Min(width, height) * 0.12F);
+                    float margin = Math.Max(2F, Math.Min(width, height) * 0.07F);
                     float scale = Math.Min(
                         (width - (margin * 2F)) / textBounds.Width,
                         (height - (margin * 2F)) / textBounds.Height);
