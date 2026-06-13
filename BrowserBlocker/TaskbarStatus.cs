@@ -20,6 +20,7 @@ namespace BrowserBlocker
         private const int SmCyIcon = 12;
         private const int SmCxSmallIcon = 49;
         private const int SmCySmallIcon = 50;
+        private const int MaxCachedMinute = 60;
         private static readonly Guid TaskbarListClassId =
             new Guid("56FDF344-FD6D-11d0-958A-006097C9A090");
 
@@ -32,6 +33,7 @@ namespace BrowserBlocker
         private int lastMinute = -1;
         private bool showingCountdown;
         private bool taskbarReady;
+        private bool iconCacheReady;
 
         public TaskbarStatus(Form form)
         {
@@ -67,7 +69,7 @@ namespace BrowserBlocker
                 IconPair nextIcon = CreateCountdownIconPair(minute);
                 IconPair previousIcon = countdownIcon;
                 countdownIcon = nextIcon;
-                countdownIconPath = SaveCountdownIcon(minute, countdownIcon.Big);
+                countdownIconPath = GetCachedCountdownIconPath(minute);
                 if (previousIcon != null)
                 {
                     previousIcon.Dispose();
@@ -145,6 +147,7 @@ namespace BrowserBlocker
 
         private static IconPair CreateCountdownIconPair(int minute)
         {
+            minute = ClampCountdownMinute(minute);
             int smallWidth = Math.Max(16, GetSystemMetrics(SmCxSmallIcon));
             int smallHeight = Math.Max(16, GetSystemMetrics(SmCySmallIcon));
             int bigWidth = Math.Max(32, GetSystemMetrics(SmCxIcon));
@@ -155,24 +158,64 @@ namespace BrowserBlocker
                 CreateCountdownIcon(minute, bigWidth, bigHeight));
         }
 
-        private static string SaveCountdownIcon(int minute, Icon icon)
+        private string GetCachedCountdownIconPath(int minute)
         {
-            string directory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                AppPaths.AppName,
-                "TaskbarIcons");
+            EnsureCountdownIconCache();
+            return GetCountdownIconPath(ClampCountdownMinute(minute));
+        }
+
+        private void EnsureCountdownIconCache()
+        {
+            if (iconCacheReady)
+            {
+                return;
+            }
+
+            string directory = GetCountdownIconDirectory();
             if (!Directory.Exists(directory))
             {
                 Directory.CreateDirectory(directory);
             }
 
-            string path = Path.Combine(directory, "countdown-" + Math.Min(99, minute) + ".ico");
-            using (FileStream stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read))
+            int bigWidth = Math.Max(32, GetSystemMetrics(SmCxIcon));
+            int bigHeight = Math.Max(32, GetSystemMetrics(SmCyIcon));
+            for (int minute = 1; minute <= MaxCachedMinute; minute++)
             {
-                icon.Save(stream);
+                string path = GetCountdownIconPath(minute);
+                if (File.Exists(path))
+                {
+                    continue;
+                }
+
+                using (Icon icon = CreateCountdownIcon(minute, bigWidth, bigHeight))
+                using (FileStream stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read))
+                {
+                    icon.Save(stream);
+                }
             }
 
-            return path;
+            iconCacheReady = true;
+        }
+
+        private static string GetCountdownIconDirectory()
+        {
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                AppPaths.AppName,
+                "TaskbarIcons",
+                "OutlinedV1");
+        }
+
+        private static string GetCountdownIconPath(int minute)
+        {
+            return Path.Combine(
+                GetCountdownIconDirectory(),
+                "countdown-" + ClampCountdownMinute(minute).ToString("00") + ".ico");
+        }
+
+        private static int ClampCountdownMinute(int minute)
+        {
+            return Math.Max(1, Math.Min(MaxCachedMinute, minute));
         }
 
         private static Icon CreateCountdownIcon(int minute, int width, int height)
@@ -187,9 +230,11 @@ namespace BrowserBlocker
                 string text = Math.Min(99, minute).ToString();
                 using (GraphicsPath path = CreateCountdownTextPath(text))
                 using (Brush brush = new SolidBrush(Color.FromArgb(224, 67, 67)))
+                using (Pen outline = new Pen(Color.Black, Math.Max(1F, Math.Min(width, height) * 0.045F)))
                 {
+                    outline.LineJoin = LineJoin.Round;
                     RectangleF textBounds = path.GetBounds();
-                    float margin = Math.Max(1F, Math.Min(width, height) * 0.03F);
+                    float margin = Math.Max(2F, Math.Min(width, height) * 0.08F);
                     float scale = Math.Min(
                         (width - (margin * 2F)) / textBounds.Width,
                         (height - (margin * 2F)) / textBounds.Height);
@@ -202,6 +247,7 @@ namespace BrowserBlocker
                         path.Transform(transform);
                     }
 
+                    graphics.DrawPath(outline, path);
                     graphics.FillPath(brush, path);
                 }
 
