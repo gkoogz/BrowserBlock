@@ -60,11 +60,12 @@ namespace BrowserBlocker
                 Icon nextIcon = CreateCountdownIcon(minute);
                 Icon previousIcon = countdownIcon;
                 countdownIcon = nextIcon;
-                ApplyWindowIcon(countdownIcon);
                 previousIcon?.Dispose();
                 lastMinute = minute;
                 showingCountdown = true;
             }
+
+            ApplyWindowIcon(countdownIcon);
 
             if (taskbarReady && form.IsHandleCreated)
             {
