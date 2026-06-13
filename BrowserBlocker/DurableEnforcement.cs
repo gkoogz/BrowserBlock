@@ -10,7 +10,7 @@ namespace BrowserBlocker
 {
     public static class DurableEnforcement
     {
-        private const string TaskName = "BrowserBlockWatchdog";
+        private const string TaskNamePrefix = "BrowserBlockWatchdog";
         private const string LegacyTaskName = "BrowserBlockerWatchdog";
 
         public static void Install()
@@ -33,8 +33,8 @@ namespace BrowserBlocker
                     taskDefinitionPath,
                     CreateTaskDefinition(watchdogPath),
                     Encoding.Unicode);
-                RunTaskScheduler(
-                    "/Create /TN " + Quote(TaskName) +
+                TryRunTaskScheduler(
+                    "/Create /TN " + Quote(GetCurrentUserTaskName()) +
                     " /XML " + Quote(taskDefinitionPath) +
                     " /F");
             }
@@ -61,19 +61,14 @@ namespace BrowserBlocker
 
         public static void RemoveTask()
         {
-            RemoveTask(TaskName);
+            RemoveTask(GetCurrentUserTaskName());
+            RemoveTask(TaskNamePrefix);
             RemoveTask(LegacyTaskName);
         }
 
         private static void RemoveTask(string taskName)
         {
-            try
-            {
-                RunTaskScheduler("/Delete /TN " + Quote(taskName) + " /F");
-            }
-            catch (InvalidOperationException)
-            {
-            }
+            TryRunTaskScheduler("/Delete /TN " + Quote(taskName) + " /F");
         }
 
         private static string GetWatchdogPath()
@@ -116,6 +111,33 @@ namespace BrowserBlocker
                 "<Actions Context=\"Author\"><Exec><Command>" +
                 SecurityElement.Escape(watchdogPath) +
                 "</Command><Arguments>--watchdog</Arguments></Exec></Actions></Task>";
+        }
+
+        private static string GetCurrentUserTaskName()
+        {
+            string userSid = WindowsIdentity.GetCurrent().User.Value;
+            return TaskNamePrefix + "-" + userSid;
+        }
+
+        private static bool TryRunTaskScheduler(string arguments)
+        {
+            try
+            {
+                RunTaskScheduler(arguments);
+                return true;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                return false;
+            }
         }
 
         private static void RunTaskScheduler(string arguments)
