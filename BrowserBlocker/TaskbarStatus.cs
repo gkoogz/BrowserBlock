@@ -10,6 +10,10 @@ namespace BrowserBlocker
     internal sealed class TaskbarStatus : IDisposable
     {
         private const int IconSize = 256;
+        private const int WmSetIcon = 0x0080;
+        private const int IconSmall = 0;
+        private const int IconBig = 1;
+        private const int IconSmall2 = 2;
         private static readonly Guid TaskbarListClassId =
             new Guid("56FDF344-FD6D-11d0-958A-006097C9A090");
 
@@ -56,7 +60,7 @@ namespace BrowserBlocker
                 Icon nextIcon = CreateCountdownIcon(minute);
                 Icon previousIcon = countdownIcon;
                 countdownIcon = nextIcon;
-                form.Icon = countdownIcon;
+                ApplyWindowIcon(countdownIcon);
                 previousIcon?.Dispose();
                 lastMinute = minute;
                 showingCountdown = true;
@@ -82,7 +86,7 @@ namespace BrowserBlocker
         {
             if (showingCountdown)
             {
-                form.Icon = standardIcon;
+                ApplyWindowIcon(standardIcon);
                 countdownIcon?.Dispose();
                 countdownIcon = null;
                 lastMinute = -1;
@@ -150,6 +154,24 @@ namespace BrowserBlocker
             }
         }
 
+        private void ApplyWindowIcon(Icon icon)
+        {
+            if (icon == null)
+            {
+                return;
+            }
+
+            form.Icon = icon;
+            if (!form.IsHandleCreated)
+            {
+                return;
+            }
+
+            SendMessage(form.Handle, WmSetIcon, new IntPtr(IconSmall), icon.Handle);
+            SendMessage(form.Handle, WmSetIcon, new IntPtr(IconBig), icon.Handle);
+            SendMessage(form.Handle, WmSetIcon, new IntPtr(IconSmall2), icon.Handle);
+        }
+
         private static Font GetCountdownFont(string text)
         {
             float size = text.Length > 1 ? 168F : 188F;
@@ -165,6 +187,13 @@ namespace BrowserBlocker
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool DestroyIcon(IntPtr iconHandle);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(
+            IntPtr windowHandle,
+            int message,
+            IntPtr parameter,
+            IntPtr value);
 
         [ComImport]
         [Guid("EA1AFB91-9E28-4B86-90E9-9E9F8A5EEFAF")]
