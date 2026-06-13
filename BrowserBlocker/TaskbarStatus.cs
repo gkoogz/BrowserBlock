@@ -75,6 +75,10 @@ namespace BrowserBlocker
                 {
                     taskbarList.SetProgressState(form.Handle, TaskbarProgressFlag.Error);
                     taskbarList.SetProgressValue(form.Handle, value, total);
+                    taskbarList.SetOverlayIcon(
+                        form.Handle,
+                        countdownIcon == null ? IntPtr.Zero : countdownIcon.Handle,
+                        minute.ToString());
                 }
                 catch (COMException)
                 {
@@ -98,6 +102,7 @@ namespace BrowserBlocker
             {
                 try
                 {
+                    taskbarList.SetOverlayIcon(form.Handle, IntPtr.Zero, null);
                     taskbarList.SetProgressState(form.Handle, TaskbarProgressFlag.NoProgress);
                 }
                 catch (COMException)
@@ -209,6 +214,17 @@ namespace BrowserBlocker
             void MarkFullscreenWindow(IntPtr hwnd, [MarshalAs(UnmanagedType.Bool)] bool fullscreen);
             void SetProgressValue(IntPtr hwnd, ulong completed, ulong total);
             void SetProgressState(IntPtr hwnd, TaskbarProgressFlag flags);
+            void RegisterTab(IntPtr tabHandle, IntPtr mainWindowHandle);
+            void UnregisterTab(IntPtr tabHandle);
+            void SetTabOrder(IntPtr tabHandle, IntPtr insertBeforeHandle);
+            void SetTabActive(IntPtr tabHandle, IntPtr mainWindowHandle, uint reserved);
+            void ThumbBarAddButtons(IntPtr hwnd, uint buttonCount, IntPtr buttons);
+            void ThumbBarUpdateButtons(IntPtr hwnd, uint buttonCount, IntPtr buttons);
+            void ThumbBarSetImageList(IntPtr hwnd, IntPtr imageList);
+            void SetOverlayIcon(
+                IntPtr hwnd,
+                IntPtr iconHandle,
+                [MarshalAs(UnmanagedType.LPWStr)] string description);
         }
 
         private enum TaskbarProgressFlag
