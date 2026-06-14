@@ -51,6 +51,7 @@ namespace BrowserBlocker
         private bool wasBlockedOnPreviousTick;
         private Color statusDotColor = GreenColor;
         private DateTime hourlyPromptUntilUtc;
+        private DateTime promptSuppressedUntilUtc = DateTime.MinValue;
         private DateTime lastPromptHour = DateTime.MinValue;
         private IntPtr previousForegroundWindow = IntPtr.Zero;
 
@@ -428,11 +429,13 @@ namespace BrowserBlocker
             wasBlockedOnPreviousTick = blocked;
 
             if (!isHourlyPromptActive &&
+                DateTime.UtcNow >= promptSuppressedUntilUtc &&
                 HourlyPromptSchedule.ShouldShow(localNow, lastPromptHour, blocked))
             {
                 ShowHourlyPrompt(localNow);
             }
             else if (!isHourlyPromptActive &&
+                DateTime.UtcNow >= promptSuppressedUntilUtc &&
                 HourlyPromptSchedule.ShouldShowBlockExpiration(
                     blockService.Remaining,
                     blocked,
@@ -472,6 +475,7 @@ namespace BrowserBlocker
             isHourlyPromptActive = true;
             lastPromptHour = HourlyPromptSchedule.GetHourKey(localNow);
             hourlyPromptUntilUtc = DateTime.UtcNow.AddSeconds(60);
+            promptSuppressedUntilUtc = DateTime.UtcNow.AddMinutes(5);
             previousForegroundWindow = GetForegroundWindow();
             wasMinimizedBeforeHourlyPrompt = WindowState == FormWindowState.Minimized;
             wasTopMostBeforeHourlyPrompt = TopMost;
