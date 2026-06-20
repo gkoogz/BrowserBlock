@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace BrowserBlocker
 {
@@ -49,6 +50,8 @@ namespace BrowserBlocker
         private bool wasTopMostBeforeHourlyPrompt;
         private bool expirationPromptShownForCurrentBlock;
         private bool wasBlockedOnPreviousTick;
+        private bool promptRequestedAttention;
+        private bool isSessionEnding;
         private Color statusDotColor = GreenColor;
         private DateTime hourlyPromptUntilUtc;
         private DateTime promptSuppressedUntilUtc = DateTime.MinValue;
@@ -72,6 +75,7 @@ namespace BrowserBlocker
             FormClosing += MainFormClosing;
             Move += MainFormMove;
             ResizeEnd += MainFormResizeEnd;
+            SystemEvents.SessionEnding += SystemEventsSessionEnding;
 
             pinButton = CreateIconButton(IconButtonKind.Pin, new Point(10, 9), "Pin widget");
             pinButton.Click += PinButtonClick;
@@ -353,11 +357,21 @@ namespace BrowserBlocker
 
         private void MainFormClosing(object sender, FormClosingEventArgs e)
         {
+            if (e.CloseReason == CloseReason.WindowsShutDown)
+            {
+                isSessionEnding = true;
+            }
+
             SaveWindowBounds();
             if (blockService.IsBlocked && e.CloseReason != CloseReason.WindowsShutDown)
             {
                 e.Cancel = true;
             }
+        }
+
+        private void SystemEventsSessionEnding(object sender, SessionEndingEventArgs e)
+        {
+            isSessionEnding = true;
         }
 
         private void MainFormMove(object sender, EventArgs e)
@@ -430,19 +444,21 @@ namespace BrowserBlocker
 
             if (!isHourlyPromptActive &&
                 DateTime.UtcNow >= promptSuppressedUntilUtc &&
+                !isSessionEnding &&
                 HourlyPromptSchedule.ShouldShow(localNow, lastPromptHour, blocked))
             {
-                ShowHourlyPrompt(localNow);
+                ShowHourlyPrompt(localNow, false);
             }
             else if (!isHourlyPromptActive &&
                 DateTime.UtcNow >= promptSuppressedUntilUtc &&
+                !isSessionEnding &&
                 HourlyPromptSchedule.ShouldShowBlockExpiration(
                     blockService.Remaining,
                     blocked,
                     expirationPromptShownForCurrentBlock))
             {
                 expirationPromptShownForCurrentBlock = true;
-                ShowHourlyPrompt(localNow);
+                ShowHourlyPrompt(localNow, true);
             }
 
             if (!isHourlyPromptActive)
@@ -470,9 +486,10 @@ namespace BrowserBlocker
                 secondsRemaining == 1 ? string.Empty : "s");
         }
 
-        private void ShowHourlyPrompt(DateTime localNow)
+        private void ShowHourlyPrompt(DateTime localNow, bool requestAttention)
         {
             isHourlyPromptActive = true;
+            promptRequestedAttention = requestAttention;
             lastPromptHour = HourlyPromptSchedule.GetHourKey(localNow);
             hourlyPromptUntilUtc = DateTime.UtcNow.AddSeconds(60);
             promptSuppressedUntilUtc = DateTime.UtcNow.AddMinutes(5);
@@ -492,6 +509,11 @@ namespace BrowserBlocker
             blockButton.Location = new Point(24, 111);
             blockButton.Text = "Block Browsers";
             blockButton.Visible = true;
+
+            if (!requestAttention)
+            {
+                return;
+            }
 
             if (WindowState == FormWindowState.Minimized)
             {
@@ -514,6 +536,7 @@ namespace BrowserBlocker
 
             isHourlyPromptActive = false;
             RestoreWindowZOrderAfterPrompt();
+            promptRequestedAttention = false;
 
             statusDot.Visible = true;
             statusLabel.Visible = true;
@@ -529,6 +552,11 @@ namespace BrowserBlocker
 
         private void RestoreWindowZOrderAfterPrompt()
         {
+            if (!promptRequestedAttention)
+            {
+                return;
+            }
+
             TopMost = wasTopMostBeforeHourlyPrompt;
             if (!wasTopMostBeforeHourlyPrompt)
             {
@@ -576,6 +604,7 @@ namespace BrowserBlocker
                 displayTimer.Dispose();
                 blockService.Dispose();
                 taskbarStatus.Dispose();
+                SystemEvents.SessionEnding -= SystemEventsSessionEnding;
             }
 
             base.Dispose(disposing);
