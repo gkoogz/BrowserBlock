@@ -10,11 +10,8 @@ namespace BrowserBlocker
     {
         private const int WmNclButtonDown = 0x00A1;
         private const int HtCaption = 0x0002;
-        private const uint SwpNoSize = 0x0001;
-        private const uint SwpNoMove = 0x0002;
-        private const uint SwpNoActivate = 0x0010;
         private const uint FlashwStop = 0x00000000;
-        private static readonly IntPtr HwndBottom = new IntPtr(1);
+        private const int SwMinimize = 6;
 
         private static readonly Color DarkBackground = Color.FromArgb(24, 26, 31);
         private static readonly Color DarkText = Color.White;
@@ -52,6 +49,7 @@ namespace BrowserBlocker
         private bool expirationPromptShownForCurrentBlock;
         private bool wasBlockedOnPreviousTick;
         private bool promptRequestedAttention;
+        private bool wasForegroundBeforeHourlyPrompt;
         private bool isSessionEnding;
         private Color statusDotColor = GreenColor;
         private DateTime hourlyPromptUntilUtc;
@@ -240,17 +238,10 @@ namespace BrowserBlocker
         private static extern bool IsWindow(IntPtr windowHandle);
 
         [DllImport("user32.dll")]
-        private static extern bool SetWindowPos(
-            IntPtr windowHandle,
-            IntPtr windowHandleInsertAfter,
-            int x,
-            int y,
-            int width,
-            int height,
-            uint flags);
+        private static extern bool FlashWindowEx(ref FlashWindowInfo flashInfo);
 
         [DllImport("user32.dll")]
-        private static extern bool FlashWindowEx(ref FlashWindowInfo flashInfo);
+        private static extern bool ShowWindow(IntPtr windowHandle, int commandShow);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct FlashWindowInfo
@@ -508,6 +499,7 @@ namespace BrowserBlocker
             hourlyPromptUntilUtc = DateTime.UtcNow.AddSeconds(60);
             promptSuppressedUntilUtc = DateTime.UtcNow.AddMinutes(5);
             previousForegroundWindow = GetForegroundWindow();
+            wasForegroundBeforeHourlyPrompt = previousForegroundWindow == Handle;
             wasMinimizedBeforeHourlyPrompt = WindowState == FormWindowState.Minimized;
             wasTopMostBeforeHourlyPrompt = TopMost;
 
@@ -573,21 +565,11 @@ namespace BrowserBlocker
             }
 
             TopMost = wasTopMostBeforeHourlyPrompt;
-            if (!wasTopMostBeforeHourlyPrompt)
-            {
-                SetWindowPos(
-                    Handle,
-                    HwndBottom,
-                    0,
-                    0,
-                    0,
-                    0,
-                    SwpNoSize | SwpNoMove | SwpNoActivate);
-            }
 
             if (wasMinimizedBeforeHourlyPrompt)
             {
                 WindowState = FormWindowState.Minimized;
+                StopTaskbarFlashSoon();
                 return;
             }
 
@@ -595,6 +577,11 @@ namespace BrowserBlocker
                 previousForegroundWindow != Handle &&
                 IsWindow(previousForegroundWindow))
             {
+                if (!wasForegroundBeforeHourlyPrompt)
+                {
+                    ShowWindow(Handle, SwMinimize);
+                }
+
                 SetForegroundWindow(previousForegroundWindow);
             }
             else if (!wasTopMostBeforeHourlyPrompt)
@@ -602,7 +589,7 @@ namespace BrowserBlocker
                 SendToBack();
             }
 
-            StopTaskbarFlash();
+            StopTaskbarFlashSoon();
         }
 
         private void StopTaskbarFlash()
@@ -621,6 +608,24 @@ namespace BrowserBlocker
                 Timeout = 0
             };
             FlashWindowEx(ref flashInfo);
+        }
+
+        private void StopTaskbarFlashSoon()
+        {
+            StopTaskbarFlash();
+            int flashStopAttempts = 0;
+            Timer flashStopTimer = new Timer { Interval = 250 };
+            flashStopTimer.Tick += delegate
+            {
+                flashStopAttempts++;
+                StopTaskbarFlash();
+                if (flashStopAttempts >= 6)
+                {
+                    flashStopTimer.Stop();
+                    flashStopTimer.Dispose();
+                }
+            };
+            flashStopTimer.Start();
         }
 
         private void DrawStatusDot(object sender, PaintEventArgs e)
