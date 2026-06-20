@@ -11,7 +11,6 @@ namespace BrowserBlocker
         private const int WmNclButtonDown = 0x00A1;
         private const int HtCaption = 0x0002;
         private const uint FlashwStop = 0x00000000;
-        private const int SwMinimize = 6;
 
         private static readonly Color DarkBackground = Color.FromArgb(24, 26, 31);
         private static readonly Color DarkText = Color.White;
@@ -44,18 +43,15 @@ namespace BrowserBlocker
         private bool isPinned;
         private bool isDarkMode = true;
         private bool isHourlyPromptActive;
-        private bool wasMinimizedBeforeHourlyPrompt;
-        private bool wasTopMostBeforeHourlyPrompt;
         private bool expirationPromptShownForCurrentBlock;
         private bool wasBlockedOnPreviousTick;
-        private bool promptRequestedAttention;
-        private bool wasForegroundBeforeHourlyPrompt;
         private bool isSessionEnding;
         private Color statusDotColor = GreenColor;
         private DateTime hourlyPromptUntilUtc;
         private DateTime promptSuppressedUntilUtc = DateTime.MinValue;
         private DateTime lastPromptHour = DateTime.MinValue;
         private IntPtr previousForegroundWindow = IntPtr.Zero;
+        private HourlyPromptForm hourlyPromptForm;
 
         public MainForm()
         {
@@ -240,9 +236,6 @@ namespace BrowserBlocker
         [DllImport("user32.dll")]
         private static extern bool FlashWindowEx(ref FlashWindowInfo flashInfo);
 
-        [DllImport("user32.dll")]
-        private static extern bool ShowWindow(IntPtr windowHandle, int commandShow);
-
         [StructLayout(LayoutKind.Sequential)]
         private struct FlashWindowInfo
         {
@@ -336,7 +329,17 @@ namespace BrowserBlocker
 
         private void BlockButtonClick(object sender, EventArgs e)
         {
+            BeginOneHourBlock(this);
+        }
+
+        private void BeginOneHourBlock(IWin32Window owner)
+        {
             blockButton.Enabled = false;
+            if (hourlyPromptForm != null)
+            {
+                hourlyPromptForm.SetBlockButtonEnabled(false);
+            }
+
             try
             {
                 blockService.BeginBlock(TimeSpan.FromHours(1));
@@ -347,7 +350,7 @@ namespace BrowserBlocker
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    this,
+                    owner,
                     AppPaths.AppName + " could not start the block.\r\n\r\n" + ex.Message,
                     AppPaths.AppName,
                     MessageBoxButtons.OK,
@@ -356,6 +359,11 @@ namespace BrowserBlocker
             finally
             {
                 blockButton.Enabled = true;
+                if (hourlyPromptForm != null)
+                {
+                    hourlyPromptForm.SetBlockButtonEnabled(true);
+                }
+
                 UpdateDisplay();
             }
         }
@@ -404,12 +412,9 @@ namespace BrowserBlocker
             statusDotColor = blocked ? RedColor : GreenColor;
             statusDot.Invalidate();
 
-            if (!isHourlyPromptActive)
-            {
-                blockButton.Visible = !blocked;
-                countdownLabel.Visible = blocked;
-                hintLabel.Visible = true;
-            }
+            blockButton.Visible = !blocked;
+            countdownLabel.Visible = blocked;
+            hintLabel.Visible = true;
 
             closeButton.Enabled = !blocked;
             closeButton.Cursor = blocked ? Cursors.Default : Cursors.Hand;
@@ -485,52 +490,37 @@ namespace BrowserBlocker
                 return;
             }
 
-            promptCountdownLabel.Text = string.Format(
-                "This prompt will dismiss in {0} second{1}",
-                secondsRemaining,
-                secondsRemaining == 1 ? string.Empty : "s");
+            if (hourlyPromptForm != null)
+            {
+                hourlyPromptForm.SetSecondsRemaining(secondsRemaining);
+            }
         }
 
         private void ShowHourlyPrompt(DateTime localNow, bool requestAttention)
         {
             isHourlyPromptActive = true;
-            promptRequestedAttention = requestAttention;
             lastPromptHour = HourlyPromptSchedule.GetHourKey(localNow);
             hourlyPromptUntilUtc = DateTime.UtcNow.AddSeconds(60);
             promptSuppressedUntilUtc = DateTime.UtcNow.AddMinutes(5);
             previousForegroundWindow = GetForegroundWindow();
-            wasForegroundBeforeHourlyPrompt = previousForegroundWindow == Handle;
-            wasMinimizedBeforeHourlyPrompt = WindowState == FormWindowState.Minimized;
-            wasTopMostBeforeHourlyPrompt = TopMost;
 
-            statusDot.Visible = false;
-            statusLabel.Visible = false;
-            countdownLabel.Visible = false;
-            hintLabel.Visible = false;
-            promptQuestionLabel.Visible = true;
-            promptCountdownLabel.Visible = true;
-            dismissButton.Visible = true;
-
-            blockButton.Size = new Size(158, 50);
-            blockButton.Location = new Point(24, 111);
-            blockButton.Text = "Block Browsers";
-            blockButton.Visible = true;
-
-            if (!requestAttention)
+            if (hourlyPromptForm != null)
             {
-                return;
+                hourlyPromptForm.Close();
+                hourlyPromptForm.Dispose();
             }
 
-            if (WindowState == FormWindowState.Minimized)
-            {
-                WindowState = FormWindowState.Normal;
-            }
+            hourlyPromptForm = new HourlyPromptForm();
+            hourlyPromptForm.BlockRequested += delegate { BeginOneHourBlock(hourlyPromptForm); };
+            hourlyPromptForm.DismissRequested += delegate { DismissHourlyPrompt(); };
+            hourlyPromptForm.SetSecondsRemaining(60);
 
-            Show();
-            TopMost = true;
-            BringToFront();
-            Activate();
-            SetForegroundWindow(Handle);
+            if (requestAttention)
+            {
+                hourlyPromptForm.Show();
+                hourlyPromptForm.Activate();
+                SetForegroundWindow(hourlyPromptForm.Handle);
+            }
         }
 
         private void DismissHourlyPrompt()
@@ -541,55 +531,36 @@ namespace BrowserBlocker
             }
 
             isHourlyPromptActive = false;
-            RestoreWindowZOrderAfterPrompt();
-            promptRequestedAttention = false;
-
-            statusDot.Visible = true;
-            statusLabel.Visible = true;
-            promptQuestionLabel.Visible = false;
-            promptCountdownLabel.Visible = false;
-            dismissButton.Visible = false;
-            hintLabel.Visible = true;
+            CloseHourlyPromptForm();
+            RestoreForegroundAfterPrompt();
 
             blockButton.Size = new Size(332, 58);
             blockButton.Location = new Point(24, 102);
             UpdateDisplay();
-            StopTaskbarFlash();
+            StopTaskbarFlashSoon();
         }
 
-        private void RestoreWindowZOrderAfterPrompt()
+        private void CloseHourlyPromptForm()
         {
-            if (!promptRequestedAttention)
+            if (hourlyPromptForm == null)
             {
                 return;
             }
 
-            TopMost = wasTopMostBeforeHourlyPrompt;
+            HourlyPromptForm promptForm = hourlyPromptForm;
+            hourlyPromptForm = null;
+            promptForm.Close();
+            promptForm.Dispose();
+        }
 
-            if (wasMinimizedBeforeHourlyPrompt)
-            {
-                WindowState = FormWindowState.Minimized;
-                StopTaskbarFlashSoon();
-                return;
-            }
-
+        private void RestoreForegroundAfterPrompt()
+        {
             if (previousForegroundWindow != IntPtr.Zero &&
                 previousForegroundWindow != Handle &&
                 IsWindow(previousForegroundWindow))
             {
-                if (!wasForegroundBeforeHourlyPrompt)
-                {
-                    ShowWindow(Handle, SwMinimize);
-                }
-
                 SetForegroundWindow(previousForegroundWindow);
             }
-            else if (!wasTopMostBeforeHourlyPrompt)
-            {
-                SendToBack();
-            }
-
-            StopTaskbarFlashSoon();
         }
 
         private void StopTaskbarFlash()
@@ -641,6 +612,7 @@ namespace BrowserBlocker
         {
             if (disposing)
             {
+                CloseHourlyPromptForm();
                 displayTimer.Dispose();
                 blockService.Dispose();
                 taskbarStatus.Dispose();

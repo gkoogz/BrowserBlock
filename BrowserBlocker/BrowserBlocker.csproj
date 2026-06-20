@@ -43,6 +43,7 @@
     <Compile Include="BrowserBlockService.cs" />
     <Compile Include="DurableEnforcement.cs" />
     <Compile Include="HourlyPromptSchedule.cs" />
+    <Compile Include="HourlyPromptForm.cs" />
     <Compile Include="IconButton.cs" />
     <Compile Include="MainForm.cs" />
     <Compile Include="Program.cs" />
