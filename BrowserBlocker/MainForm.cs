@@ -13,6 +13,7 @@ namespace BrowserBlocker
         private const uint SwpNoSize = 0x0001;
         private const uint SwpNoMove = 0x0002;
         private const uint SwpNoActivate = 0x0010;
+        private const uint FlashwStop = 0x00000000;
         private static readonly IntPtr HwndBottom = new IntPtr(1);
 
         private static readonly Color DarkBackground = Color.FromArgb(24, 26, 31);
@@ -248,6 +249,19 @@ namespace BrowserBlocker
             int height,
             uint flags);
 
+        [DllImport("user32.dll")]
+        private static extern bool FlashWindowEx(ref FlashWindowInfo flashInfo);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct FlashWindowInfo
+        {
+            public uint Size;
+            public IntPtr WindowHandle;
+            public uint Flags;
+            public uint Count;
+            public uint Timeout;
+        }
+
         private static IconButton CreateIconButton(IconButtonKind kind, Point location, string tooltip)
         {
             IconButton button = new IconButton
@@ -447,7 +461,7 @@ namespace BrowserBlocker
                 !isSessionEnding &&
                 HourlyPromptSchedule.ShouldShow(localNow, lastPromptHour, blocked))
             {
-                ShowHourlyPrompt(localNow, false);
+                ShowHourlyPrompt(localNow, true);
             }
             else if (!isHourlyPromptActive &&
                 DateTime.UtcNow >= promptSuppressedUntilUtc &&
@@ -548,6 +562,7 @@ namespace BrowserBlocker
             blockButton.Size = new Size(332, 58);
             blockButton.Location = new Point(24, 102);
             UpdateDisplay();
+            StopTaskbarFlash();
         }
 
         private void RestoreWindowZOrderAfterPrompt()
@@ -586,6 +601,26 @@ namespace BrowserBlocker
             {
                 SendToBack();
             }
+
+            StopTaskbarFlash();
+        }
+
+        private void StopTaskbarFlash()
+        {
+            if (!IsHandleCreated)
+            {
+                return;
+            }
+
+            FlashWindowInfo flashInfo = new FlashWindowInfo
+            {
+                Size = (uint)Marshal.SizeOf(typeof(FlashWindowInfo)),
+                WindowHandle = Handle,
+                Flags = FlashwStop,
+                Count = 0,
+                Timeout = 0
+            };
+            FlashWindowEx(ref flashInfo);
         }
 
         private void DrawStatusDot(object sender, PaintEventArgs e)
