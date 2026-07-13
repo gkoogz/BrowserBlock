@@ -32,6 +32,7 @@ namespace BrowserBlocker
         private readonly Button dismissButton;
         private readonly Label countdownLabel;
         private readonly Label hintLabel;
+        private readonly Label promptHourLabel;
         private readonly Label promptQuestionLabel;
         private readonly Label promptCountdownLabel;
         private readonly WindowSettingsStore windowSettingsStore;
@@ -166,14 +167,24 @@ namespace BrowserBlocker
                 Visible = false
             };
 
+            promptHourLabel = new Label
+            {
+                TextAlign = ContentAlignment.MiddleCenter,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI Semibold", 16F, FontStyle.Bold),
+                Size = new Size(332, 36),
+                Location = new Point(24, 41),
+                Visible = false
+            };
+
             promptQuestionLabel = new Label
             {
                 Text = "Would you like to block your browser for an hour?",
                 TextAlign = ContentAlignment.MiddleCenter,
                 ForeColor = DarkText,
                 Font = new Font("Segoe UI Semibold", 11F, FontStyle.Bold),
-                Size = new Size(332, 42),
-                Location = new Point(24, 56),
+                Size = new Size(332, 28),
+                Location = new Point(24, 78),
                 Visible = false
             };
 
@@ -205,6 +216,7 @@ namespace BrowserBlocker
             Controls.Add(blockButton);
             Controls.Add(dismissButton);
             Controls.Add(countdownLabel);
+            Controls.Add(promptHourLabel);
             Controls.Add(promptQuestionLabel);
             Controls.Add(promptCountdownLabel);
             Controls.Add(hintLabel);
@@ -315,6 +327,7 @@ namespace BrowserBlocker
             titleLabel.ForeColor = text;
             countdownLabel.ForeColor = text;
             hintLabel.ForeColor = mutedText;
+            promptHourLabel.ForeColor = Color.White;
             promptQuestionLabel.ForeColor = text;
             promptCountdownLabel.ForeColor = mutedText;
             statusDot.BackColor = background;
@@ -507,6 +520,10 @@ namespace BrowserBlocker
             statusLabel.Visible = false;
             countdownLabel.Visible = false;
             hintLabel.Visible = false;
+            promptHourLabel.Text = string.Format(
+                "The hour is {0}.",
+                localNow.ToString("h:mm tt"));
+            promptHourLabel.Visible = true;
             promptQuestionLabel.Visible = true;
             promptCountdownLabel.Visible = true;
             dismissButton.Visible = true;
@@ -546,6 +563,7 @@ namespace BrowserBlocker
 
             statusDot.Visible = true;
             statusLabel.Visible = true;
+            promptHourLabel.Visible = false;
             promptQuestionLabel.Visible = false;
             promptCountdownLabel.Visible = false;
             dismissButton.Visible = false;

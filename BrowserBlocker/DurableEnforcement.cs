@@ -71,6 +71,25 @@ namespace BrowserBlocker
             TryRunTaskScheduler("/Delete /TN " + Quote(taskName) + " /F");
         }
 
+        public static void DeployWatchdogExecutable(string sourcePath, string watchdogPath)
+        {
+            try
+            {
+                File.Copy(sourcePath, watchdogPath, true);
+            }
+            catch (IOException)
+            {
+                FileInfo existingWatchdog = new FileInfo(watchdogPath);
+                if (!existingWatchdog.Exists || existingWatchdog.Length == 0)
+                {
+                    throw;
+                }
+
+                // Windows locks a running executable. The existing watchdog is
+                // already enforcing the same persisted deadline and can be reused.
+            }
+        }
+
         private static string GetWatchdogPath()
         {
             return Path.Combine(
@@ -81,24 +100,7 @@ namespace BrowserBlocker
 
         private static void PrepareWatchdogExecutable(string watchdogPath)
         {
-            try
-            {
-                File.Copy(Assembly.GetExecutingAssembly().Location, watchdogPath, true);
-            }
-            catch (IOException)
-            {
-                if (!File.Exists(watchdogPath))
-                {
-                    throw;
-                }
-            }
-            catch (UnauthorizedAccessException)
-            {
-                if (!File.Exists(watchdogPath))
-                {
-                    throw;
-                }
-            }
+            DeployWatchdogExecutable(Assembly.GetExecutingAssembly().Location, watchdogPath);
         }
 
         private static string CreateTaskDefinition(string watchdogPath)

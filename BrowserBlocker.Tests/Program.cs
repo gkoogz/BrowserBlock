@@ -88,6 +88,55 @@ namespace BrowserBlocker.Tests
             Assert(loadedBounds == expectedBounds, "Window bounds round-trip");
             Directory.Delete(settingsDirectory, true);
 
+            string deployDirectory = Path.Combine(
+                Path.GetTempPath(),
+                "BrowserBlocker.Tests",
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(deployDirectory);
+            string sourceExecutable = Path.Combine(deployDirectory, "source.exe");
+            string watchdogExecutable = Path.Combine(deployDirectory, "watchdog.exe");
+            File.WriteAllText(sourceExecutable, "new watchdog");
+            File.WriteAllText(watchdogExecutable, "running watchdog");
+            using (FileStream lockedWatchdog = new FileStream(
+                watchdogExecutable,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read))
+            {
+                DurableEnforcement.DeployWatchdogExecutable(
+                    sourceExecutable,
+                    watchdogExecutable);
+                Assert(
+                    File.ReadAllText(watchdogExecutable) == "running watchdog",
+                    "Running watchdog executable is reused when locked");
+            }
+
+            DurableEnforcement.DeployWatchdogExecutable(
+                sourceExecutable,
+                watchdogExecutable);
+            Assert(
+                File.ReadAllText(watchdogExecutable) == "new watchdog",
+                "Stopped watchdog executable is updated");
+            Directory.Delete(deployDirectory, true);
+
+            string renewalDirectory = Path.Combine(
+                Path.GetTempPath(),
+                "BrowserBlocker.Tests",
+                Guid.NewGuid().ToString("N"));
+            string renewalStatePath = Path.Combine(renewalDirectory, "block-until.txt");
+            BlockStateStore renewalStore = new BlockStateStore(renewalStatePath);
+            renewalStore.SaveBlockUntilUtc(DateTime.UtcNow.AddMilliseconds(100));
+            using (BrowserBlockService renewalService = new BrowserBlockService(renewalStore))
+            {
+                renewalStore.SaveBlockUntilUtc(DateTime.UtcNow.AddMinutes(5));
+                System.Threading.Thread.Sleep(150);
+                Assert(
+                    renewalService.IsBlocked,
+                    "Running watchdog adopts a renewed persisted deadline");
+            }
+            renewalStore.Clear();
+            Directory.Delete(renewalDirectory, true);
+
             Console.WriteLine(failures == 0 ? "All tests passed." : failures + " test(s) failed.");
             return failures == 0 ? 0 : 1;
         }

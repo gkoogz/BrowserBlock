@@ -100,8 +100,17 @@ namespace BrowserBlocker
             {
                 if (blockUntilUtc.HasValue && blockUntilUtc.Value <= DateTime.UtcNow)
                 {
-                    blockUntilUtc = null;
-                    expired = true;
+                    DateTime? persistedDeadline = stateStore.LoadBlockUntilUtc();
+                    if (persistedDeadline.HasValue &&
+                        persistedDeadline.Value > DateTime.UtcNow)
+                    {
+                        blockUntilUtc = persistedDeadline;
+                    }
+                    else
+                    {
+                        blockUntilUtc = null;
+                        expired = true;
+                    }
                 }
             }
 
